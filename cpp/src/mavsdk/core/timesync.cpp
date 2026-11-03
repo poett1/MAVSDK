@@ -35,9 +35,9 @@ void Timesync::enable()
         this);
 
     // This used to be a do_work() that compared elapsed time on every pass of the system
-    // work poll. It is just a fixed interval, so let CallEveryHandler keep the time.
+    // work poll. CallEveryHandler keeps the time; the tick sets each next interval.
     _send_cookie = _system_impl.add_call_every(
-        [this]() { send_timesync_tick(); }, static_cast<float>(TIMESYNC_SEND_INTERVAL_S));
+        [this]() { send_timesync_tick(); }, static_cast<float>(TimesyncSchedule::FAST_INTERVAL_S));
 }
 
 TimesyncEstimator::Estimate Timesync::estimate() const
@@ -64,13 +64,21 @@ void Timesync::send_timesync_tick()
         // old exchanges to be found inconsistent.
         std::lock_guard<std::mutex> lock(_estimator_mutex);
         _estimator.reset();
+        _was_connected = false;
         return;
     }
 
     const int64_t ts1 = steady_now_ns();
+    if (!_was_connected) {
+        _was_connected = true;
+        _schedule.restart(ts1);
+    }
     _outstanding[_outstanding_next] = ts1;
     _outstanding_next = (_outstanding_next + 1) % MAX_OUTSTANDING;
     send_timesync(0, ts1);
+
+    _system_impl.change_call_every(
+        static_cast<float>(_schedule.next_interval_s(ts1, estimate())), _send_cookie);
 }
 
 bool Timesync::take_outstanding(int64_t ts1)

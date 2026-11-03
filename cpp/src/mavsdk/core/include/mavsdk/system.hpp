@@ -180,9 +180,15 @@ public:
     /**
      * @brief Enable time synchronization using the TIMESYNC messages.
      *
-     * Sends one TIMESYNC request per second and estimates the offset and drift of the
-     * autopilot clock against the local `std::chrono::steady_clock` (`CLOCK_MONOTONIC` on
-     * Linux). See timesync_status().
+     * Sends TIMESYNC requests and estimates the offset and drift of the autopilot clock
+     * against the local `std::chrono::steady_clock` (`CLOCK_MONOTONIC` on Linux). See
+     * timesync_status().
+     *
+     * After the autopilot (re)connects, requests go out at about 10 Hz for 10 to 30 s, until
+     * the uncertainty is down to 2 ms, then at about 1 Hz. Each interval gets a random extra
+     * delay of up to 20 ms, so that requests do not all meet the same phase of the
+     * autopilot's main loop. Call this as early as possible: the estimate needs a few seconds
+     * of requests, and is good to a millisecond or better after about 5 s.
      */
     void enable_timesync();
 

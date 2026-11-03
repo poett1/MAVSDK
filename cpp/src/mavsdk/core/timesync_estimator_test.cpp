@@ -157,3 +157,26 @@ TEST(TimesyncEstimator, IgnoresImpossibleExchange)
     estimator.add({10 * s, 5 * s, 9 * s});
     EXPECT_EQ(estimator.estimate().exchanges, 0u);
 }
+
+// A few exchanges 100 ms apart cannot bound the drift, and the widest band then sat at the
+// end of the search range (-10000 ppm, seen right after start on ArduPlane). The estimate
+// should keep a plausible drift until the exchanges tell it, and stay within its uncertainty.
+TEST(TimesyncEstimator, UnboundedDriftStaysAtZero)
+{
+    TimesyncEstimator estimator;
+    Link link{-290 * s, 860.0};
+    for (int64_t t = 100 * s; t < 100 * s + 500 * ms; t += 100 * ms) {
+        estimator.add(link.exchange(t));
+    }
+    const auto& est = estimator.estimate();
+    ASSERT_TRUE(est.valid);
+    EXPECT_EQ(est.drift_ppm, 0.0);
+    const int64_t error = est.offset_ns - true_offset_at(link, est.local_ns);
+    EXPECT_LE(std::abs(error), est.uncertainty_ns);
+
+    // Once the exchanges span long enough, the drift comes from them again.
+    for (int64_t t = 101 * s; t < 160 * s; t += 1 * s) {
+        estimator.add(link.exchange(t));
+    }
+    EXPECT_NEAR(estimator.estimate().drift_ppm, 860.0, 20.0);
+}

@@ -8,6 +8,7 @@
 #include "mavsdk_time.hpp"
 #include "mavlink_include.hpp"
 #include "timesync_estimator.hpp"
+#include "timesync_schedule.hpp"
 
 namespace mavsdk {
 
@@ -36,8 +37,10 @@ private:
     bool take_outstanding(int64_t ts1);
     void update_autopilot_time(const TimesyncEstimator::Estimate& estimate);
 
-    static constexpr double TIMESYNC_SEND_INTERVAL_S = 1.0;
     CallEveryHandler::Cookie _send_cookie{};
+    // Only touched from the send tick.
+    TimesyncSchedule _schedule{};
+    bool _was_connected{false};
 
     // ts1 of our requests in flight. A reply is only used if it echoes one of these: on a
     // shared link the autopilot also answers other agents' requests, and ArduPilot forwards

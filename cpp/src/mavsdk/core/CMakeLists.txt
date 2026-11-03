@@ -106,6 +106,7 @@ target_sources(mavsdk
     string_utils.cpp
     timesync.cpp
     timesync_estimator.cpp
+    timesync_schedule.cpp
 )
 
 cmake_policy(SET CMP0079 NEW)
@@ -288,6 +289,7 @@ list(APPEND UNIT_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/mavsdk/core/ringbuffer_test.cpp
     ${PROJECT_SOURCE_DIR}/mavsdk/core/timeout_handler_test.cpp
     ${PROJECT_SOURCE_DIR}/mavsdk/core/timesync_estimator_test.cpp
+    ${PROJECT_SOURCE_DIR}/mavsdk/core/timesync_schedule_test.cpp
     ${PROJECT_SOURCE_DIR}/mavsdk/core/tx_queue_test.cpp
     ${PROJECT_SOURCE_DIR}/mavsdk/core/unittests_main.cpp
     ${PROJECT_SOURCE_DIR}/mavsdk/core/mavlink_parameter_cache_test.cpp

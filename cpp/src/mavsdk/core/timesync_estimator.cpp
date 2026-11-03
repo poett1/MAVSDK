@@ -122,17 +122,33 @@ void TimesyncEstimator::update()
         _exchanges.pop_front();
     }
 
-    // The estimate is the centre of the interval at the best drift. The true clock line
-    // may have any drift that still fits, though, and each gives its own interval. All
-    // exchanges lie at or before the reference time, so both interval edges rise with
-    // the drift: the offsets any fitting line allows run from the lower edge at the
-    // smallest fitting drift to the upper edge at the largest.
+    // The true clock line may have any drift that still fits, and each gives its own
+    // interval. All exchanges lie at or before the reference time, so both interval edges
+    // rise with the drift: the offsets any fitting line allows run from the lower edge at
+    // the smallest fitting drift to the upper edge at the largest.
+    double drift_min = drift_ppm;
+    double drift_max = drift_ppm;
+    if (_exchanges.size() > 1) {
+        drift_min = feasible_drift_edge(drift_ppm, -MAX_DRIFT_PPM);
+        drift_max = feasible_drift_edge(drift_ppm, MAX_DRIFT_PPM);
+        // Until the exchanges bound the drift (a few close together right after start),
+        // the widest band sits at whichever end of the search range, -10000 ppm or so,
+        // which then also extrapolates the offset badly. Take the fitting drift closest to
+        // zero instead; the uncertainty below covers all of them either way.
+        const double edge = MAX_DRIFT_PPM * 0.999;
+        if (drift_min <= -edge || drift_max >= edge) {
+            drift_ppm = std::clamp(0.0, drift_min, drift_max);
+            interval(drift_ppm, lo, hi);
+        }
+    }
+
+    // The estimate is the centre of the interval at the chosen drift.
     const double centre = (lo + hi) / 2.0;
     double reach = (hi - lo) / 2.0;
     if (_exchanges.size() > 1) {
         double lo_min, hi_ignored, lo_ignored, hi_max;
-        interval(feasible_drift_edge(drift_ppm, -MAX_DRIFT_PPM), lo_min, hi_ignored);
-        interval(feasible_drift_edge(drift_ppm, MAX_DRIFT_PPM), lo_ignored, hi_max);
+        interval(drift_min, lo_min, hi_ignored);
+        interval(drift_max, lo_ignored, hi_max);
         reach = std::max({reach, centre - lo_min, hi_max - centre});
     }
 
