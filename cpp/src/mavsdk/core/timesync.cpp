@@ -22,13 +22,12 @@ Timesync::~Timesync()
 
 void Timesync::enable()
 {
-    if (_is_enabled) {
+    if (_is_enabled.exchange(true)) {
         // System::enable_timesync() is public API and used to be idempotent, so keep it that
         // way: registering the tick twice would double the timesync rate and leak a cookie.
+        // An exchange, not a check and then a store, as it may be called from any thread.
         return;
     }
-
-    _is_enabled = true;
     _system_impl.register_mavlink_message_handler(
         MAVLINK_MSG_ID_TIMESYNC,
         [this](const mavlink_message_t& message) { process_timesync(message); },

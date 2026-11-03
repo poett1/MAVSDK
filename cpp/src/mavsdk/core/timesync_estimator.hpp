@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 
@@ -59,10 +60,12 @@ public:
 
 private:
     // Feasible interval [lo, hi] of the offset at the newest exchange for a given drift,
-    // relative to _base_ns.
-    void interval(double drift_ppm, double& lo, double& hi) const;
-    double width(double drift_ppm) const;
-    double best_drift() const;
+    // relative to _base_ns, using the exchanges from index first on.
+    void interval(double drift_ppm, double& lo, double& hi, size_t first = 0) const;
+    double width(double drift_ppm, size_t first = 0) const;
+    double best_drift(size_t first = 0) const;
+    // Drops the fewest oldest exchanges that make the rest fit a line again.
+    void drop_inconsistent();
     // Drift between inside (fits) and outside where the band closes.
     double feasible_drift_edge(double inside, double outside) const;
     void update();

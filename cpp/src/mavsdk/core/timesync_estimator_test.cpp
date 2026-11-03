@@ -119,6 +119,29 @@ TEST(TimesyncEstimator, RecoversFromRemoteClockStep)
     EXPECT_LE(std::abs(est.offset_ns - true_offset_at(after, est.local_ns)), est.uncertainty_ns);
 }
 
+// A clock step in a full 10 Hz window: everything before the step goes, in one bisection
+// rather than one drift search per dropped exchange (which stalled the MAVLink thread for
+// 35 ms on a Raspberry Pi 5), and the exchanges after it are all kept.
+TEST(TimesyncEstimator, ClockStepInFullWindowDropsOnlyTheOldClock)
+{
+    TimesyncEstimator estimator;
+    Link before{-290 * s, 935.0};
+    int64_t t = 100 * s;
+    for (; t < 160 * s; t += 100 * ms) {
+        estimator.add(before.exchange(t));
+    }
+    ASSERT_EQ(estimator.estimate().exchanges, 600u);
+
+    Link after{-300 * s, 935.0};
+    for (int i = 0; i < 5; ++i, t += 100 * ms) {
+        estimator.add(after.exchange(t));
+    }
+    const auto& est = estimator.estimate();
+    EXPECT_EQ(est.exchanges, 5u);
+    EXPECT_TRUE(est.valid);
+    EXPECT_LE(std::abs(est.offset_ns - true_offset_at(after, est.local_ns)), est.uncertainty_ns);
+}
+
 TEST(TimesyncEstimator, WindowDropsOldExchanges)
 {
     TimesyncEstimator estimator{10 * s};

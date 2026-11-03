@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 
@@ -52,6 +53,6 @@ private:
     mutable std::mutex _estimator_mutex{};
     TimesyncEstimator _estimator{};
 
-    bool _is_enabled{false};
+    std::atomic<bool> _is_enabled{false};
 };
 } // namespace mavsdk

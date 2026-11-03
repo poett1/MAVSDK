@@ -27,7 +27,7 @@ void TimesyncEstimator::add(const Exchange& exchange)
     update();
 }
 
-void TimesyncEstimator::interval(double drift_ppm, double& lo, double& hi) const
+void TimesyncEstimator::interval(double drift_ppm, double& lo, double& hi, size_t first) const
 {
     // Times relative to the newest exchange, offsets relative to _base_ns, both in doubles:
     // the window is at most minutes long, so the values stay far inside double precision.
@@ -35,7 +35,9 @@ void TimesyncEstimator::interval(double drift_ppm, double& lo, double& hi) const
     const double rate = drift_ppm * 1e-6;
     lo = -std::numeric_limits<double>::infinity();
     hi = std::numeric_limits<double>::infinity();
-    for (const auto& e : _exchanges) {
+    for (auto it = _exchanges.begin() + static_cast<std::ptrdiff_t>(first); it != _exchanges.end();
+         ++it) {
+        const auto& e = *it;
         const double t = static_cast<double>(e.local_send_ns - t_ref);
         const double drift = rate * t;
         lo = std::max(lo, static_cast<double>(e.remote_ns - e.local_recv_ns - _base_ns) - drift);
@@ -43,14 +45,14 @@ void TimesyncEstimator::interval(double drift_ppm, double& lo, double& hi) const
     }
 }
 
-double TimesyncEstimator::width(double drift_ppm) const
+double TimesyncEstimator::width(double drift_ppm, size_t first) const
 {
     double lo, hi;
-    interval(drift_ppm, lo, hi);
+    interval(drift_ppm, lo, hi, first);
     return hi - lo;
 }
 
-double TimesyncEstimator::best_drift() const
+double TimesyncEstimator::best_drift(size_t first) const
 {
     // The width is a minimum of linear functions minus a maximum of linear functions of the
     // drift, so it is concave and a golden-section search finds its maximum.
@@ -59,21 +61,21 @@ double TimesyncEstimator::best_drift() const
     double b = MAX_DRIFT_PPM;
     double c = b - inv_phi * (b - a);
     double d = a + inv_phi * (b - a);
-    double wc = width(c);
-    double wd = width(d);
+    double wc = width(c, first);
+    double wd = width(d, first);
     while (b - a > 1e-4) {
         if (wc >= wd) {
             b = d;
             d = c;
             wd = wc;
             c = b - inv_phi * (b - a);
-            wc = width(c);
+            wc = width(c, first);
         } else {
             a = c;
             c = d;
             wc = wd;
             d = a + inv_phi * (b - a);
-            wd = width(d);
+            wd = width(d, first);
         }
     }
     return (a + b) / 2.0;
@@ -97,6 +99,25 @@ double TimesyncEstimator::feasible_drift_edge(double inside, double outside) con
     return inside;
 }
 
+void TimesyncEstimator::drop_inconsistent()
+{
+    // Dropping old exchanges only removes constraints, so once the rest fits, dropping more
+    // keeps it fitting: bisect for the cut instead of dropping one exchange per drift
+    // search, which took 35 ms for a full 10 Hz window on a Raspberry Pi 5, on the thread
+    // that handles all MAVLink traffic. The newest exchange alone always fits.
+    size_t fits = _exchanges.size() - 1;
+    size_t fails = 0;
+    while (fits - fails > 1) {
+        const size_t mid = fails + (fits - fails) / 2;
+        if (width(best_drift(mid), mid) >= 0.0) {
+            fits = mid;
+        } else {
+            fails = mid;
+        }
+    }
+    _exchanges.erase(_exchanges.begin(), _exchanges.begin() + static_cast<std::ptrdiff_t>(fits));
+}
+
 void TimesyncEstimator::update()
 {
     if (_exchanges.empty()) {
@@ -107,19 +128,17 @@ void TimesyncEstimator::update()
     const auto& newest = _exchanges.back();
     _base_ns = newest.remote_ns - newest.local_recv_ns;
 
-    double drift_ppm = 0.0;
+    // A single exchange cannot tell drift; keep it at zero rather than at whatever end of
+    // the flat search range the search lands on.
+    double drift_ppm = _exchanges.size() > 1 ? best_drift() : 0.0;
     double lo = 0.0;
     double hi = 0.0;
-    while (true) {
-        // A single exchange cannot tell drift; keep it at zero rather than at whatever
-        // end of the flat search range the search lands on.
+    interval(drift_ppm, lo, hi);
+    if (hi < lo) {
+        // No line fits: a clock stepped. The newest exchange is the one to trust.
+        drop_inconsistent();
         drift_ppm = _exchanges.size() > 1 ? best_drift() : 0.0;
         interval(drift_ppm, lo, hi);
-        if (hi >= lo || _exchanges.size() == 1) {
-            break;
-        }
-        // No line fits: a clock stepped. The newest exchange is the one to trust.
-        _exchanges.pop_front();
     }
 
     // The true clock line may have any drift that still fits, and each gives its own
