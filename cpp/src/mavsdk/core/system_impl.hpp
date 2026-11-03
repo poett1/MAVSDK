@@ -54,6 +54,7 @@ public:
     void init(uint32_t system_id, uint8_t comp_id);
 
     void enable_timesync();
+    TimesyncEstimator::Estimate timesync_estimate() const { return _timesync.estimate(); }
 
     System::IsConnectedHandle subscribe_is_connected(const System::IsConnectedCallback& callback);
     void unsubscribe_is_connected(System::IsConnectedHandle handle);

@@ -92,6 +92,37 @@ void System::enable_timesync()
     _system_impl->enable_timesync();
 }
 
+System::TimesyncStatus System::timesync_status() const
+{
+    const auto est = _system_impl->timesync_estimate();
+    TimesyncStatus status;
+    status.valid = est.valid;
+    status.local_time_ns = est.local_ns;
+    status.offset_ns = est.offset_ns;
+    status.drift_ppm = est.drift_ppm;
+    status.uncertainty_ns = est.uncertainty_ns;
+    status.exchanges = est.exchanges;
+    return status;
+}
+
+std::optional<int64_t> System::local_to_autopilot_time_ns(int64_t local_time_ns) const
+{
+    const auto est = _system_impl->timesync_estimate();
+    if (!est.valid) {
+        return std::nullopt;
+    }
+    return TimesyncEstimator::to_remote(est, local_time_ns);
+}
+
+std::optional<int64_t> System::autopilot_to_local_time_ns(int64_t autopilot_time_ns) const
+{
+    const auto est = _system_impl->timesync_estimate();
+    if (!est.valid) {
+        return std::nullopt;
+    }
+    return TimesyncEstimator::to_local(est, autopilot_time_ns);
+}
+
 Autopilot System::autopilot_type() const
 {
     return _system_impl->autopilot();

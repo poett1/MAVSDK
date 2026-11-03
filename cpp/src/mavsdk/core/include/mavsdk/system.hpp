@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <array>
 #include <functional>
 #include <vector>
@@ -177,8 +179,58 @@ public:
 
     /**
      * @brief Enable time synchronization using the TIMESYNC messages.
+     *
+     * Sends one TIMESYNC request per second and estimates the offset and drift of the
+     * autopilot clock against the local `std::chrono::steady_clock` (`CLOCK_MONOTONIC` on
+     * Linux). See timesync_status().
      */
     void enable_timesync();
+
+    /**
+     * @brief State of the TIMESYNC estimate.
+     *
+     * Each TIMESYNC round trip bounds the true offset between the clocks, whatever the
+     * delays on the two legs. The estimate is the clock line that fits the round trips of
+     * the last minute with the widest margin, not the round-trip midpoint, which is off by
+     * half of any time the autopilot holds the request before stamping it (up to a whole
+     * main loop on ArduPilot). `uncertainty_ns` covers every line that still fits.
+     */
+    struct TimesyncStatus {
+        bool valid{false}; /**< @brief Enough round trips for an estimate. */
+        int64_t local_time_ns{0}; /**< @brief steady_clock time the offset refers to, in ns. */
+        int64_t offset_ns{0}; /**< @brief Autopilot minus local time at local_time_ns, in ns. */
+        double drift_ppm{0.0}; /**< @brief How much faster the autopilot clock runs, in ppm. */
+        int64_t uncertainty_ns{0}; /**< @brief Farthest the true offset can be, at local_time_ns. */
+        uint32_t exchanges{0}; /**< @brief Round trips the estimate is based on. */
+    };
+
+    /**
+     * @brief Get the state of the TIMESYNC estimate.
+     *
+     * Requires enable_timesync().
+     *
+     * @return the current estimate; `valid` is false until enough round trips arrived.
+     */
+    TimesyncStatus timesync_status() const;
+
+    /**
+     * @brief Convert a local steady_clock time to autopilot time.
+     *
+     * @param local_time_ns `std::chrono::steady_clock` time in ns since its epoch
+     * (`CLOCK_MONOTONIC` on Linux).
+     * @return the autopilot time in ns (the clock it uses in TIMESYNC, its boot time for
+     * ArduPilot and PX4), or nothing while timesync_status() is not valid.
+     */
+    std::optional<int64_t> local_to_autopilot_time_ns(int64_t local_time_ns) const;
+
+    /**
+     * @brief Convert an autopilot time to local steady_clock time.
+     *
+     * @param autopilot_time_ns autopilot time in ns, e.g. a MAVLink `time_usec` times 1000.
+     * @return the `std::chrono::steady_clock` time in ns since its epoch, or nothing while
+     * timesync_status() is not valid.
+     */
+    std::optional<int64_t> autopilot_to_local_time_ns(int64_t autopilot_time_ns) const;
 
     /**
      * @brief Get autopilot type.
